@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MineBot — Live Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: system-ui, sans-serif;
+  background: #0f1117;
+  color: #e2e8f0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid #1e2433;
+  background: #0d1017;
+  flex-shrink: 0;
+}
+h1 { font-size: 14px; font-weight: 600; letter-spacing: .04em; color: #f8fafc; }
+.hdr-right { display: flex; align-items: center; gap: 18px; }
+.pkt-count { font-size: 11px; color: #475569; font-family: monospace; }
+.status { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #94a3b8; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex-shrink: 0; transition: background .3s; }
+.dot.on { background: #22c55e; }
+
+/* ── Main layout: left column = video+controls, right = sensors ── */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 12px;
+  padding: 12px;
+  flex: 1;
+  overflow: hidden;
+}
+.left  { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.right { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+
+/* ── Cards ── */
+.card {
+  background: #161b27;
+  border: 1px solid #1e2433;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.card-title {
+  font-size: 10px; font-weight: 600;
+  color: #475569; letter-spacing: .07em;
+  text-transform: uppercase; margin-bottom: 10px;
+}
+
+/* ── Video ── */
+.video-wrap {
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 4/3;
+  display: flex; align-items: center; justify-content: center;
+}
+.video-wrap img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cam-badge {
+  position: absolute; top: 8px; left: 8px;
+  background: rgba(220, 38, 38, .85);
+  color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 3px;
+  letter-spacing: .06em;
+}
+.cam-label {
+  position: absolute; bottom: 8px; right: 10px;
+  font-size: 10px; color: #475569;
+}
+.no-cam {
+  font-size: 13px; color: #334155; text-align: center; padding: 20px;
+}
+
+/* ── Controls ── */
+.ctrl-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+.ctrl-grid .blank { opacity: 0; pointer-events: none; }
+button {
+  background: #1a2336;
+  border: 1px solid #253045;
+  border-radius: 7px;
+  color: #cbd5e1;
+  font-size: 13px; font-weight: 500;
+  padding: 10px 0;
+  cursor: pointer;
+  transition: background .12s, transform .08s;
+  width: 100%;
+}
+button:hover { background: #1e2a42; }
+button:active { background: #243350; transform: scale(0.96); }
+.btn-stop {
+  background: #7f1d1d !important;
+  border-color: #991b1b !important;
+  color: #fca5a5 !important;
+}
+.btn-stop:hover { background: #991b1b !important; }
+
+/* ── Sensor rows ── */
+.srow {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid #1a2030;
+  gap: 8px;
+}
+.srow:last-child { border-bottom: none; }
+.sname { font-size: 11px; color: #64748b; flex-shrink: 0; width: 110px; }
+.sval  { font-size: 12px; font-weight: 600; font-family: monospace; text-align: right; white-space: nowrap; }
+.bar-bg { flex: 1; height: 4px; background: #1e2a3a; border-radius: 2px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease, background .4s ease; }
+
+.good  { color: #22c55e; }
+.warn  { color: #f59e0b; }
+.crit  { color: #ef4444; }
+.bool-on  { color: #ef4444; font-weight: 700; }
+.bool-off { color: #22c55e; }
+
+/* ── Log ── */
+.log {
+  background: #0a0d14;
+  border: 1px solid #1a2030;
+  border-radius: 6px;
+  padding: 8px 10px;
+  height: 120px;
+  overflow-y: auto;
+  font-size: 10px;
+  font-family: monospace;
+  line-height: 1.9;
+}
+.log-row { border-bottom: 1px solid #111825; padding: 1px 0; }
+.l-sent { color: #38bdf8; }
+.l-recv { color: #86efac; }
+.l-err  { color: #ef4444; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MineBot · Live Dashboard</h1>
+  <div class="hdr-right">
+    <span class="pkt-count">Packets: <span id="pkt-n">0</span></span>
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <span id="status-txt">Disconnected</span>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ── LEFT: video + controls ── -->
+  <div class="left">
+
+    <div class="card" style="flex:1;">
+      <div class="card-title">Night vision · OV5647 · CSI 0</div>
+      <div class="video-wrap">
+        <img
+          id="cam-img"
+          src="{{ video_url }}"
+          alt=""
+          onerror="this.style.display='none'; document.getElementById('cam-err').style.display='flex';"
+        >
+        <div id="cam-err" class="no-cam" style="display:none;">
+          Camera unavailable<br>
+          <span style="font-size:11px;margin-top:4px;display:block;">
+            Check OV5647 connection on RPi CSI port 0
+          </span>
+        </div>
+        <div class="cam-badge" id="rec-badge">REC</div>
+        <span class="cam-label">640 × 480 · 30fps · MJPEG</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Movement commands</div>
+      <div class="ctrl-grid">
+        <div class="blank"><button></button></div>
+        <button onclick="cmd('forward')">▲ Forward</button>
+        <div class="blank"><button></button></div>
+
+        <button onclick="cmd('left')">◀ Left</button>
+        <button class="btn-stop" onclick="cmd('stop')">■ STOP</button>
+        <button onclick="cmd('right')">Right ▶</button>
+
+        <div class="blank"><button></button></div>
+        <button onclick="cmd('back')">▼ Back</button>
+        <div class="blank"><button></button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Command log</div>
+      <div class="log" id="log"></div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT: all sensor panels ── -->
+  <div class="right">
+
+    <!-- Gas -->
+    <div class="card">
+      <div class="card-title">Gas sensors — MQ series</div>
+      <div class="srow">
+        <span class="sname">MQ-2 smoke/LPG</span>
+        <div class="bar-bg"><div class="bar-fill" id="b-mq2"></div></div>
+        <span class="sval" id="mq2">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">MQ-4 methane</span>
+        <div class="bar-bg"><div class="bar-fill" id="b-mq4"></div></div>
+        <span class="sval" id="mq4">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">MQ-5 natural gas</span>
+        <div class="bar-bg"><div class="bar-fill" id="b-mq5"></div></div>
+        <span class="sval" id="mq5">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">MQ-6 butane</span>
+        <div class="bar-bg"><div class="bar-fill" id="b-mq6"></div></div>
+        <span class="sval" id="mq6">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">MQ-7 CO</span>
+        <div class="bar-bg"><div class="bar-fill" id="b-mq7"></div></div>
+        <span class="sval" id="mq7">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">MQ-8 hydrogen</span>
+        <div class="bar-bg"><div class="bar-fill" id="b-mq8"></div></div>
+        <span class="sval" id="mq8">—</span>
+      </div>
+    </div>
+
+    <!-- Environment -->
+    <div class="card">
+      <div class="card-title">Environment</div>
+      <div class="srow">
+        <span class="sname">Temperature</span>
+        <span class="sval" id="temp">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Humidity</span>
+        <span class="sval" id="humidity">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">PM 2.5</span>
+        <span class="sval" id="pm25">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Heat / IR temp</span>
+        <span class="sval" id="heat">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Moisture</span>
+        <span class="sval" id="moisture">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Motion ahead</span>
+        <span class="sval" id="motion">—</span>
+      </div>
+    </div>
+
+    <!-- IMU -->
+    <div class="card">
+      <div class="card-title">IMU — orientation</div>
+      <div class="srow">
+        <span class="sname">Pitch</span>
+        <span class="sval" id="pitch">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Roll</span>
+        <span class="sval" id="roll">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Yaw</span>
+        <span class="sval" id="yaw">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Accel X/Y/Z</span>
+        <span class="sval" id="accel">—</span>
+      </div>
+    </div>
+
+    <!-- Proximity -->
+    <div class="card">
+      <div class="card-title">Proximity — ultrasonic</div>
+      <div class="srow">
+        <span class="sname">Front obstacle</span>
+        <span class="sval" id="front">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Floor distance</span>
+        <span class="sval" id="floor">—</span>
+      </div>
+      <div class="srow">
+        <span class="sname">Collision alert</span>
+        <span class="sval" id="collision">—</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+const socket = io();
+let pktCount = 0;
+
+// ── Connection status ─────────────────────────────────────────────
+socket.on('rpi_status', d => {
+  document.getElementById('dot').className = 'dot' + (d.connected ? ' on' : '');
+  document.getElementById('status-txt').textContent =
+    d.connected ? 'RPi Connected' : 'RPi Disconnected';
+  addLog(d.connected ? 'RPi connected' : 'RPi disconnected',
+         d.connected ? 'l-recv' : 'l-err');
+});
+
+// ── Gas bar helper ────────────────────────────────────────────────
+function gasClass(v) {
+  return v > 2.0 ? 'crit' : v > 1.2 ? 'warn' : 'good';
+}
+function gasColor(v) {
+  return v > 2.0 ? '#ef4444' : v > 1.2 ? '#f59e0b' : '#22c55e';
+}
+function setGas(id, v) {
+  const pct = Math.min(100, (v / 3.0) * 100).toFixed(1);
+  document.getElementById('b-' + id).style.width    = pct + '%';
+  document.getElementById('b-' + id).style.background = gasColor(v);
+  const el = document.getElementById(id);
+  el.textContent = v.toFixed(3) + 'V';
+  el.className   = 'sval ' + gasClass(v);
+}
+
+// ── Sensor data ───────────────────────────────────────────────────
+socket.on('sensor_data', d => {
+  pktCount++;
+  document.getElementById('pkt-n').textContent = pktCount;
+
+  if (d.gas) {
+    setGas('mq2', d.gas.mq2);
+    setGas('mq4', d.gas.mq4);
+    setGas('mq5', d.gas.mq5);
+    setGas('mq6', d.gas.mq6);
+    setGas('mq7', d.gas.mq7);
+    setGas('mq8', d.gas.mq8);
+  }
+
+  if (d.env) {
+    const e = d.env;
+    const tEl = document.getElementById('temp');
+    tEl.textContent = e.temp.toFixed(1) + ' °C';
+    tEl.className   = 'sval ' + (e.temp > 40 ? 'crit' : e.temp > 35 ? 'warn' : 'good');
+
+    document.getElementById('humidity').textContent = e.humidity.toFixed(1) + ' %';
+
+    const pmEl = document.getElementById('pm25');
+    pmEl.textContent = e.pm25.toFixed(1) + ' µg/m³';
+    pmEl.className   = 'sval ' + (e.pm25 > 150 ? 'crit' : e.pm25 > 75 ? 'warn' : 'good');
+
+    const hEl = document.getElementById('heat');
+    hEl.textContent = e.heat_c.toFixed(1) + ' °C';
+    hEl.className   = 'sval ' + (e.heat_c > 60 ? 'crit' : e.heat_c > 40 ? 'warn' : 'good');
+
+    const mEl = document.getElementById('moisture');
+    mEl.textContent = e.moisture ? 'WET' : 'Dry';
+    mEl.className   = 'sval ' + (e.moisture ? 'bool-on' : 'bool-off');
+
+    const moEl = document.getElementById('motion');
+    moEl.textContent = e.motion ? 'DETECTED' : 'Clear';
+    moEl.className   = 'sval ' + (e.motion ? 'bool-on' : 'bool-off');
+  }
+
+  if (d.imu) {
+    const i = d.imu;
+    document.getElementById('pitch').textContent = i.pitch.toFixed(2) + '°';
+    document.getElementById('roll').textContent  = i.roll.toFixed(2)  + '°';
+    document.getElementById('yaw').textContent   = i.yaw.toFixed(2)   + '°';
+    document.getElementById('accel').textContent =
+      i.ax.toFixed(2) + ' / ' + i.ay.toFixed(2) + ' / ' + i.az.toFixed(2);
+  }
+
+  if (d.prox) {
+    const p = d.prox;
+    const fEl = document.getElementById('front');
+    fEl.textContent = p.front_cm + ' cm';
+    fEl.className   = 'sval ' + (p.front_cm < 30 ? 'crit' : p.front_cm < 80 ? 'warn' : 'good');
+    document.getElementById('floor').textContent = p.floor_cm + ' cm';
+    const cEl = document.getElementById('collision');
+    cEl.textContent = p.collision ? 'ALERT' : 'Clear';
+    cEl.className   = 'sval ' + (p.collision ? 'bool-on' : 'bool-off');
+  }
+});
+
+// ── Commands ──────────────────────────────────────────────────────
+function cmd(action) {
+  socket.emit('command', { cmd: action, speed: 60, ts: Date.now() });
+  addLog('→ ' + action.toUpperCase(), 'l-sent');
+}
+
+// ── Log ───────────────────────────────────────────────────────────
+function addLog(msg, cls) {
+  const el = document.getElementById('log');
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  const t = new Date().toLocaleTimeString();
+  row.innerHTML = `<span class="${cls}">[${t}] ${msg}</span>`;
+  el.prepend(row);
+  if (el.children.length > 60) el.removeChild(el.lastChild);
+}
+</script>
+</body>
+</html>
