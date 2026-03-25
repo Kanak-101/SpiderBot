@@ -162,4 +162,6 @@ install:
 	    asyncio.run(main())
 	EOF
 	sudo chmod +x /home/rpi_node.py
-	@echo "Done. Run 'python3 /home/rpi_node.py' to start."
+	@echo "Done. The Environment has been setup."
+	python3 /home/rpi_node.py
+	@echo "Scipt is running"
