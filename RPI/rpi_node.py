@@ -252,28 +252,20 @@ async def handle_laptop(websocket):
 
 
 async def super_loop():
-    """
-    Main data loop: reads all sensors, packs into JSON,
-    sends to laptop at RATE_MAIN_LOOP interval.
-    """
     last_gas  = 0
-    last_env  = 0
     last_imu  = 0
     last_prox = 0
 
     while True:
         now = time.time()
-        should_send = False
-
-        # Build packet only for sensors whose rate has elapsed
         packet = {"type": "sensors", "ts": round(now, 3)}
+        should_send = False
 
         if now - last_gas >= CONFIG["RATE_GAS"]:
             data = read_all_sensors()
-            packet["gas"]  = data["gas"]
-            packet["env"]  = data["env"]
+            packet["gas"] = data["gas"]
+            packet["env"] = data["env"]
             last_gas = now
-            last_env = now
             should_send = True
 
         if now - last_imu >= CONFIG["RATE_IMU"]:
@@ -294,7 +286,9 @@ async def super_loop():
             except Exception as e:
                 print(f"[WS]  Send error: {e}")
 
-        await asyncio.sleep(CONFIG["RATE_MAIN_LOOP"])
+        # This yield is critical — gives asyncio room to breathe
+        # even when camera thread is hammering the GIL
+        await asyncio.sleep(0.05)
 
 
 async def main():
