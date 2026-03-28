@@ -4,7 +4,14 @@ install:
 	@echo "--- Installing Dependencies and Script ---"
 	sudo apt update && sudo apt upgrade -y
 	sudo apt install -y python3-full python3-websockets python3-picamera2 python3-libcamera
-	sudo nmcli connection add \ type ethernet \ ifname eth0 \ con-name "laptop-link" \ ipv4.method manual \ ipv4.addresses 192.168.10.1/24 \ ipv4.never-default yes \ connection.autoconnect yes
+	sudo nmcli connection add \
+	type ethernet \
+	ifname eth0 \
+	con-name "laptop-link" \
+	ipv4.method manual \
+	ipv4.addresses 192.168.10.1/24 \
+	ipv4.never-default yes \
+	connection.autoconnect yes
 	sudo nmcli connection up "laptop-link"
 	@sudo tee /home/rpi_node.py > /dev/null << 'EOF'
 	import asyncio
