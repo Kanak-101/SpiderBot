@@ -4,9 +4,8 @@ install:
 	@echo "--- Installing Dependencies and Script ---"
 	sudo apt update && sudo apt upgrade -y
 	sudo apt install -y python3-full python3-websockets python3-picamera2 python3-libcamera
-	@printf "network:\n  version: 2\n  ethernets:\n    eth0:\n      dhcp4: no\n      addresses:\n        - 192.168.10.1/24\n" | sudo tee /etc/netplan/99-custom-netplan.yaml > /dev/null
-	sudo chmod 600 /etc/netplan/99-custom-netplan.yaml
-	sudo netplan apply
+	sudo nmcli connection add \ type ethernet \ ifname eth0 \ con-name "laptop-link" \ ipv4.method manual \ ipv4.addresses 192.168.10.1/24 \ ipv4.never-default yes \ connection.autoconnect yes
+	sudo nmcli connection up "laptop-link"
 	@sudo tee /home/rpi_node.py > /dev/null << 'EOF'
 	import asyncio
 	import websockets
